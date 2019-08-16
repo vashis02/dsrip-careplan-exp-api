@@ -1,0 +1,58 @@
+#%RAML 1.0 DataType
+
+#This file is located at dataTypes/resources/CarePlan.raml
+
+
+type: DomainResource
+properties:
+  identifier?: Identifier[]
+  definition?: Reference[]
+  basedOn?: Reference[]
+  replaces?: Reference[]
+  partOf?: Reference[]
+  status:
+    type: code
+    enum: [draft, active, suspended, completed, entered-in-error, cancelled, unknown]
+  intent:
+    type: code
+    enum: [proposal, plan, order, option]
+  category?: CodeableConcept[]
+  title?: string
+  description?: string
+  subject: Reference
+  context?: Reference
+  period?: Period
+  author?: Reference[]
+  careTeam?: Reference[]
+  addresses?: Reference[]
+  supportingInfo?: Reference[]
+  goal?: Reference[]
+  activity?: 
+    type: array
+    items: 
+      type: BackboneElement
+      properties:
+        outcomeCodeableConcept?: CodeableConcept[]
+        outcomeReference?: Reference[]
+        progress?: Annotation[]
+        reference?: Reference
+        detail?:
+          type: BackboneElement
+          properties:
+            category?: CodeableConcept
+            definition?: Reference
+            code?: CodeableConcept
+            reasonCode?: CodeableConcept[]
+            reasonReference?: Reference[]
+            goal?: Reference[]
+            status: code
+            statusReason?: string
+            prohibited?: boolean
+            /^scheduled(Timing|Period|String)$/?: Timing | Period | string
+            location?: Reference
+            performer?: Reference[]
+            /^product(CodeableConcept|Reference)$/?: CodeableConcept | Reference
+            dailyAmount?: SimpleQuantity
+            quantity?: SimpleQuantity
+            description?: string
+  note?: Annotation[]

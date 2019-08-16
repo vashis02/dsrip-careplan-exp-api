@@ -1,0 +1,41 @@
+{
+    "resourceType": "Bundle",
+    "type": "searchset",
+    "link": [
+        {
+            "relation": "self"
+        }
+    ],
+    "meta": {
+        "lastUpdated": "2017-11-24T05:45:22.593-05:00"
+    },
+    "entry": [
+        {
+            "resourceType": "CarePlan",
+            "id": "3171239~MXXS-EXXC~FPA HIV SCREEN~05/03/2017 00:00:00~",
+            "subject": {
+                "reference": "1234566"
+            },
+            "identifier": [
+                {
+                    "assigner": {
+                        "reference": "MXXS-EXXC"
+                    }
+                }
+            ],
+            "title": "FPA HIV SCREEN",
+            "activity": [
+                {
+                    "detail": {
+                        "scheduledPeriod": {}
+                    }
+                }
+            ],
+            "status": "Completed",
+            "period": {
+                "end": "2017-05-03T00:00:00"
+            }
+        }
+        
+    ]
+}

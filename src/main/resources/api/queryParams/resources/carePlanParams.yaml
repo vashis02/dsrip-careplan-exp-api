@@ -1,0 +1,8 @@
+patientid:
+  type: string
+  required: false
+  description: Patient's ID
+sourcename:
+  type: string
+  required: false
+  description: Source Partner name

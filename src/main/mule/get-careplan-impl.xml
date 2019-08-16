@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:redis="http://www.mulesoft.org/schema/mule/redis" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<sub-flow name="key_builder_Sub_Flow" doc:id="0c9b5ba6-58f1-4d38-b3d6-69cd01bf436d" >
+		<ee:transform doc:name="Build Redis Key" doc:id="aec0d024-5eee-4391-8038-a63f5e5ceb68" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+var specialChar= '-'
+var getClientId=
+if(vars.clientId == (p('pat360.clientid')))
+	'PAT360'
+else if(vars.clientId == (p('apiconnect.clientid')))
+	'APICONNECT'
+else if(vars.clientId == (p('basicapp.clientid')))
+	'BASIC'
+else if(vars.clientId == (p('sema4.clientid')))
+	'SEMA4'
+else if(vars.clientId == (p('oscar.clientid')))
+	'OSCAR'
+else if(vars.clientId == (p('oscar.mask.clientid')))
+	'OSCAR-MASK'
+else if(vars.clientId == (p('sema4.NonBasic.clientid')))
+	'SEMA4NONBASIC'		
+else
+	''
+---
+([(vars.apiName default ''), p('mule.env'),  getClientId] ++ (message.attributes.queryParams pluck $)) joinBy specialChar
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="fcf40047-b789-4db3-b64f-0c0773bade4a" message="created redis key : #[vars.rediskey]"/>
+	</sub-flow>
+	<flow name="get-careplan-implFlow" doc:id="cd214c3a-0d27-43e1-8ecd-7dbea5cd5f93" >
+		<ee:transform doc:name="Set Variables" doc:id="6d7de751-56d3-4416-9111-1db94c346364" >
+			<ee:variables >
+				<ee:set-variable resource="dwl/correlationId.dwl" variableName="correlationId" />
+				<ee:set-variable resource="dwl/startTime.dwl" variableName="startTime" />
+				<ee:set-variable resource="dwl/apiName.dwl" variableName="apiName" />
+				<ee:set-variable resource="dwl/clientId.dwl" variableName="clientId" />
+			</ee:variables>
+		</ee:transform>
+		<logger level="INFO" doc:name="Entry Logger" doc:id="d151dd02-9f60-47d4-973e-f1b1153df3ab" message="#['AllergyIntolerance EXP-API Entry ' 
+++ write({
+	&quot;SVC_ID&quot;: vars.rediskey,
+	&quot;Correlation ID &quot;: vars.correlationId,
+	&quot;Start Time&quot;: vars.startTime
+}, &quot;application/java&quot;)]"/>
+		<flow-ref doc:name="key_builder_sub_flow" doc:id="26205653-3808-43a1-a638-1442ca3f8b8c" name="key_builder_Sub_Flow"/>
+		<redis:exists doc:name="redis-key-exists" doc:id="bc33a1ef-2b57-4631-92fe-0592339e9cb5" key="#[vars.rediskey]" target="exists" config-ref="Redis__Configuration"/>
+		<logger level="INFO" doc:name="Logger" doc:id="e571e30a-6aa4-4ba9-b89c-0fd40a6209d0" message="#['Does ' ++ vars.rediskey ++ ' exist? ' ++ vars.exists]"/>
+		<choice doc:name="choice-rediskey" doc:id="cfbf85ab-34c8-4526-b51c-d24e02d01b6d" >
+			<when expression="#[vars.exists]">
+				<logger level="INFO" doc:name="log-exists-message" doc:id="1d3c98e6-725d-4f8e-b1a3-b78528932058" message="Have the Key so getting from Cache"/>
+				<redis:get doc:name="get-rediskey" doc:id="8d0cea9c-ee29-40ee-9524-2c2ac677beac" config-ref="Redis__Configuration" key="#[vars.rediskey]"/>
+			</when>
+			<otherwise >
+				<flow-ref doc:name="Invoke_CarePlan_SystemAPI_Flow_Ref" doc:id="3e5b96a6-e76b-442a-b1d3-621920ef5941" name="Invoke_CarePlan_SystemAPI_Flow"/>
+				<logger level="INFO" doc:name="Logger" doc:id="0fa8206a-9614-4f5c-a4ce-8d82cb4f80b6" message="Before Redis"/>
+				<redis:set doc:name="redis-set" doc:id="c5cafc3d-744e-4d70-a0e7-b06e019c6f4b" config-ref="Redis__Configuration" target="redis" key="#[vars.rediskey]" expire="${cache.expire}"/>
+			</otherwise>
+		</choice>
+		<logger level="INFO" doc:name="Logger" doc:id="86683908-bc03-42bc-810a-4d0711216401" message="#['CarePlan EXP-API Exit '
+++ 
+write({
+	&quot;SVC_ID&quot;:	vars.rediskey,
+	&quot;Correlation ID&quot;:	vars.correlationId,
+	&quot;End Time&quot;: now().nanoseconds,
+	&quot;Total Processing Time &quot;:	((now().nanoseconds - vars.startTime) / 1000000) ++ 'milli sec' 
+}, &quot;application/java&quot;)]"/>
+	</flow>
+	<flow name="Invoke_CarePlan_SystemAPI_Flow" doc:id="aa1546df-9d54-40ad-8f48-39562bebaf5b" >
+		<choice doc:name="Choice" doc:id="d4f0bd11-1d1e-46f5-a5db-20267cbc1817" >
+			<when doc:id="79168cc1-e54f-4276-adbf-04cf204962ce" expression="#[(vars.clientId == p('apiconnect.clientid')) or 
+(vars.clientId == p('basicapp.clientid'))]">
+				<logger level="INFO" doc:name="Logger" doc:id="0054c7b6-6415-431b-bc7a-efb9062e960f" message="Mapping for ApiConnect"/>
+				<http:request method="GET" doc:name="https-rc_SYS_Request" doc:id="4b0f939e-c09c-4c4f-9002-2063f2c82675" config-ref="https-rc_SYS" path="/System/PAT360/CarePlan">
+					<http:headers ><![CDATA[#[output application/java
+---
+{
+	"client_id" : vars.clientId,
+	"correlation_Id" : vars.correlationId
+}]]]></http:headers>
+					<http:query-params>
+      #[attributes.queryParams]
+    </http:query-params>
+				</http:request>
+				<ee:transform doc:name="Transform Message" doc:id="557e96a9-11c0-48ea-a689-e236388e3166" >
+					<ee:message >
+						<ee:set-payload resource="dwl/health-maintanence-apiconnect-mapping-new.dwl" />
+					</ee:message>
+				</ee:transform>
+			</when>
+			<when expression="#[(vars.clientId == p('apiconnect.mask.clientid'))]">
+				<logger level="INFO" doc:name="Logger" doc:id="c7cb0ec3-8cf5-4dfc-be8e-12fbbb9ab28f" message="Mapping for apiConnect - Masked Client"/>
+				<http:request method="GET" doc:name="Request" doc:id="f164a488-c611-455e-9dcd-10114e59c693" config-ref="https-rc_SYS" path="/System/PAT360/CarePlan">
+					<http:headers ><![CDATA[#[output application/java
+---
+{
+	"client_id" : vars.clientId,
+	"correlation_Id" : vars.correlationId
+}]]]></http:headers>
+					<http:query-params>
+      #[attributes.queryParams]
+    </http:query-params>
+				</http:request>
+				<ee:transform doc:name="Transform Message" doc:id="1dfeddb2-5502-4ff8-873c-d0ae774add59" >
+					<ee:message >
+						<ee:set-payload resource="dwl/health-maintanence-apiconnect-mapping-masked-new.dwl" />
+					</ee:message>
+				</ee:transform>
+			</when>
+			<when expression="#[Vars.clientId == p('oscar.clientid')]">
+				<logger level="INFO" doc:name="Logger" doc:id="8b142b02-196b-49f7-b895-ff2da2842801" message="Mapping for OSCAR"/>
+				<http:request method="GET" doc:name="Request" doc:id="391dc348-45c8-4eee-8cf0-33b16fa689d9" config-ref="https-rc_SYS" path="/System/PEP/CarePlan">
+					<http:headers ><![CDATA[#[output application/java
+---
+{
+	"client_id" : vars.clientId,
+	"correlation_Id" : vars.correlationId
+}]]]></http:headers>
+					<http:query-params>
+      #[attributes.queryParams]
+    </http:query-params>
+				</http:request>
+				<ee:transform doc:name="Transform Message" doc:id="8f4c4487-de7a-4eb5-97cc-02e8374456c2" >
+					<ee:message >
+						<ee:set-payload resource="dwl/health-maintanence-oscar-mapping.dwl" />
+					</ee:message>
+				</ee:transform>
+			</when>
+			<when expression="#[vars.clientId == p('oscar.mask.clientid')]">
+				<logger level="INFO" doc:name="Logger" doc:id="8b4d59c7-c127-4e70-a70a-254b01b78c0b" message="Masked Mapping for OSCAR"/>
+				<http:request method="GET" doc:name="Request" doc:id="1c32b284-b786-4887-bd6f-80bef9db25c8" config-ref="https-rc_SYS" path="/System/PEP/CarePlan">
+					<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Key" : "Value"
+}]]]></http:headers>
+					<http:query-params>
+      #[attributes.queryParams]
+    </http:query-params>
+				</http:request>
+				<ee:transform doc:name="Transform Message" doc:id="335e763e-5295-42b8-b1bf-f5758e123ed3">
+					<ee:message>
+						<ee:set-payload resource="dwl/health-maintanence-oscar-mapping-masked.dwl" />
+					</ee:message>
+				</ee:transform>
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="Logger" doc:id="cfd5476e-3380-4d67-be8b-303deac3a8a8" message="Invalid clientId received!!!"/>
+				<ee:transform doc:name="Transform Message" doc:id="e31d621b-3085-4393-8366-4064a9c6b7db" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{ 
+	status: "400", 
+	message: message.attributes.reasonPhrase
+}]]></ee:set-payload>
+					</ee:message>
+					<ee:variables >
+						<ee:set-variable variableName="reasonPhrase" ><![CDATA[%dw 2.0
+output application/java
+---
+'Invalid ClientID']]></ee:set-variable>
+						<ee:set-variable variableName="statusCode" ><![CDATA[400]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</otherwise>
+		</choice>
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="0684feec-bd01-4e80-812a-189e4ed4789f" type="HTTP:BAD_REQUEST, HTTP:CLIENT_SECURITY, HTTP:CONNECTIVITY, HTTP:FORBIDDEN, HTTP:INTERNAL_SERVER_ERROR, HTTP:METHOD_NOT_ALLOWED, HTTP:NOT_ACCEPTABLE, HTTP:NOT_FOUND, HTTP:PARSING, HTTP:RETRY_EXHAUSTED, HTTP:SECURITY, HTTP:SERVICE_UNAVAILABLE, HTTP:TIMEOUT, HTTP:TOO_MANY_REQUESTS, HTTP:UNAUTHORIZED, HTTP:UNSUPPORTED_MEDIA_TYPE">
+				<logger level="INFO" doc:name="Logger" doc:id="36ec1e11-89ea-4b0e-9bbb-bc1f05d319a2" message="Status Code Validation Exception Occured in CarePlan EXP API"/>
+				<ee:transform doc:name="Transform Message" doc:id="9f9b63bf-5fca-401b-b69c-7f06f8753218" >
+					<ee:message >
+					</ee:message>
+					<ee:variables >
+						<ee:set-variable variableName="statusCode" ><![CDATA[%dw 2.0
+output application/java
+---
+message.attributes.statusCode]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</on-error-continue>
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="41414bdf-12a4-43c8-9cc9-abf9a8f27af7" type="EXPRESSION, STREAM_MAXIMUM_SIZE_EXCEEDED">
+				<logger level="INFO" doc:name="Logger" doc:id="a525dd22-e845-4458-9f37-af1f8b384810" message="Error occurred"/>
+			</on-error-propagate>
+		</error-handler>
+	</flow> 
+</mule>
